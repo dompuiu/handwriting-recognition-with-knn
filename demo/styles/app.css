@@ -1,0 +1,171 @@
+* { -moz-box-sizing: border-box; -webkit-box-sizing: border-box; box-sizing: border-box; }
+
+a {
+    cursor: pointer;
+}
+
+.navbar {
+    display: none;
+}
+
+.canvas-container {
+    text-align: center;
+}
+
+.canvas {
+    border: 1px solid #ddd;
+    margin: auto;
+}
+
+.history-container {
+    width: 940px;
+    margin: auto;
+    margin-top: 40px;
+}
+
+.history-container h1 {
+    margin-bottom: 20px;
+    margin-left: 10px;
+}
+
+.set {
+    overflow: auto;
+    margin-top: 20px;
+}
+
+.thumbnails {
+    white-space: nowrap;
+    margin-top: 10px;
+    margin-left: 0;
+    counter-reset: item;
+}
+
+.thumbnail {
+    display: inline-block;
+    position: relative;
+}
+
+.thumbnails li {
+    display: inline;
+    float: none;
+    position: relative;
+}
+
+.thumbnails li:not(.legend-li):not(.empty-marker):before {
+    content: counter(item) ". ";
+    counter-increment: item -1;
+    display:block;
+    position: absolute;
+    z-index: 20000;
+    right: 12px;
+    bottom: 12px;
+}
+
+.thumbnails li.span2:last-child {
+    margin-right: 30px;
+}
+
+.thumbnail img {
+    background: #fff;
+}
+
+.legend {
+    font-size: 8em;
+    color: #6f6f6f;
+    letter-spacing: -.12em;
+    position: relative;
+    top: -20px;
+}
+
+.thumbnails .legend-li {
+    margin-left: 10px;
+}
+
+.empty {
+    display: table-cell;
+    width: 160px;
+    height: 120px;
+    background: #ccc;
+    vertical-align: middle;
+    text-align: center;
+    text-decoration: none;
+    font-size: 1.5em;
+    color: #969696;
+}
+
+a.thumbnail:hover {
+    text-decoration: none;
+}
+
+.legend-text {
+    font-size: 2em;
+    color: #6f6f6f;
+    display: inline-block;
+    top: -55px;
+    text-align: center;
+    left: 6%;
+    position: relative;
+}
+
+.x {
+    display: none;
+}
+
+a.thumbnail:hover .x {
+    position: absolute; 
+    height: 120px; 
+    width: 160px; 
+    text-align: center; 
+    font-size: 7em; 
+    left: 4px; 
+    top: 4px; 
+    padding-top: 20px; 
+    color: #666; 
+    background-color: rgba(204, 204, 204, 0.9);
+    display: block;
+}
+
+#reset-storage {
+    margin-top: 5px;
+    float: right;
+    display: none;
+}
+
+#filter {
+    padding: 0 20px;
+}
+
+.message {
+    width: 60%;
+    margin: 20px auto 0;
+    text-align: center;
+}
+
+.position {
+    position: absolute; 
+    bottom: 4px; 
+    right: 4px; 
+}
+
+a.thumbnail:hover .position {
+    display: none;
+}
+
+.preloader {
+    position: absolute; 
+    z-index: 20000;
+    width: 100%;
+    height: 100%;
+    font-size: 3em;
+    line-height: 1em;
+    display: table;
+    background: white;
+    top: 0;
+    left: 0;
+}
+
+.preloader span {
+    display: table-cell;
+    text-align: center;
+    vertical-align: middle;
+}
