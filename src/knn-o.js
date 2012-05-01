@@ -27,8 +27,8 @@ Knn = {
         var matrix, sortDistancesIndices, i, vote, classType = {}, max = 0, result;
         
         matrix = this.getDistanceMatrix(inData, callback);
-        
         sortDistancesIndices = this.sortDistancesIndices(matrix);
+        
         for (i = 0; i < this.k; i += 1) {
             vote = this.labels[sortDistancesIndices[i]];
             if (classType[vote]) {
@@ -37,7 +37,7 @@ Knn = {
                 classType[vote] = 1;
             }
         }
-
+        
         _.each(classType, function(num, key){ 
             if (num > max) {
                 max = num;
@@ -52,8 +52,7 @@ Knn = {
         var result = [], i, l, intersection;
         
         for (i = 0, l = this.trainingSet.length; i < l; i += 1) {
-            intersection = _.difference(this.trainingSet[i], inData);
-            
+            intersection = _.intersection(this.trainingSet[i], inData);
             result.push(Math.sqrt(inData.length + this.trainingSet[i].length - (2 * intersection.length)));
             if (callback) {
                 callback(i, l);
