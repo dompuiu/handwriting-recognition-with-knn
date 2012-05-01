@@ -19,11 +19,6 @@
         router,
         preloader = $('<span></span>').appendTo($('<div class="preloader"></div>').appendTo('body')),
         preloaderInterval;
-    
-    if ('webkitIndexedDB' in window) {
-        window.IDBTransaction = window.webkitIDBTransaction;
-        window.IDBKeyRange = window.webkitIDBKeyRange;
-    }
 
     preloaderInterval = setInterval(function () {
         preloader.html(WaitingMsg.getText('Loading'));
@@ -54,165 +49,16 @@
         }
     }
     
-    IndexedDB = {
-        indexedDB: window.indexedDB || window.webkitIndexedDB || window.mozIndexedDB,
-        db: null,
-        defaultVer: '2',
-        dbName: 'training-set200',
-        lastId: 0,
-        
-        onerror: function (e) {
-            console.log(e);
-        },
-        
-        open: function (callback) {
-            var request = this.indexedDB.open(this.dbName);
-            var that = this;
-            
-            request.onsuccess = function(e) {
-                var v = localStorage.getItem('db-ver') || that.defaultVer;
-                that.db = e.target.result;
-                var db = that.db;
-                //console.log(db);
-                // We can only create Object stores in a setVersion transaction;
-                if (v != db.version) {
-                    that.truncate(function () {
-                        that.getAll(callback);
-                    });
-                } else {
-                    that.getAll(callback);
-                }
-                
-            };
-
-            request.onerror = this.onerror;
-        },
-        
-        getAll: function(callback) {
-            var that = this, db = this.db, trans, store, keyRange, cursorRequest, values = [];
-            
-            trans = db.transaction(["data"], IDBTransaction.READ_WRITE);
-            store = trans.objectStore("data");
-
-            // Get everything in the store;
-            keyRange = IDBKeyRange.lowerBound(0);
-            cursorRequest = store.openCursor(keyRange);
-
-            cursorRequest.onsuccess = function(e) {
-                var result = e.target.result;
-                if(!!result == false) {
-                    if (callback) {
-                        callback(values);
-                    }
-                    return;
-                }
-
-                values.push(result.value);
-                
-                that.lastId = result.value.id;
-                
-                result.continue();
-            };
-
-            cursorRequest.onerror = this.onerror;
-        },
-        
-        add: function(data, callback) {
-            var that = this, 
-                trans = this.db.transaction(["data"], IDBTransaction.READ_WRITE);
-                store = trans.objectStore("data"),
-                this.lastId += 1,
-                data.id = this.lastId,
-                request = store.put(data);
-            
-            request.onsuccess = function(e) {
-                if (callback) {
-                    callback();
-                }
-            };
-            request.onerror = this.onerror;
-        },
-        
-        remove: function(id, callback) {
-            var db = this.db;
-            var trans = db.transaction(["data"], IDBTransaction.READ_WRITE);
-            var store = trans.objectStore("data");
-            var that = this;
-
-            var request = store.delete(id);
-
-            request.onsuccess = function(e) {
-                if (callback) {
-                    callback();
-                }
-            };
-
-            request.onerror = this.onerror;
-        },
-        
-        truncate: function (callback) {
-            var that = this, db = this.db, setVrequest, v;
-            
-            v = localStorage.getItem('db-ver');
-            if (!v) {
-                v = this.defaultVer;
-            } else {
-                v = Number(v);
-                v += 1;
-                v = String(v);
-            }
-            
-            localStorage.setItem('db-ver', v);
-            
-            if (db.setVersion) {                
-                setVrequest = db.setVersion(v);
-
-                // onsuccess is the only place we can create Object Stores
-                setVrequest.onerror = this.onerror;
-                setVrequest.onsuccess = function(e) {
-                    if(db.objectStoreNames.contains("data")) {
-                        db.deleteObjectStore("data");
-                    }
-                    var store = db.createObjectStore("data", {keyPath: "id"});
-                    
-                    if (callback) {
-                        callback();
-                    }
-                };
-            } else {
-                this.db.close();
-                
-                setVrequest = this.indexedDB.open(this.dbName, v);
-                setVrequest.onupgradeneeded = function(e) {
-                    var db = e.target.result;
-                    
-                    if(db.objectStoreNames.contains("data")) {
-                        db.deleteObjectStore("data");
-                    }
-
-                    var store = db.createObjectStore("data", {keyPath: "id"});
-                    
-                    db.close();
-                    
-                    if (callback) {
-                        that.open(callback);
-                    }
-                }  
-            }
-        }
-                
-    }
-    
     Numbers = {
         values: [],
         key: 'knn-recognition',
-        storage: IndexedDB,
+        storage: TrainingSetDB,
         values: [],
         
         loadStore: function (callback) {
             var that = this;
             
-            this.storage.open(function (values) {
+            this.storage.get(null, function (values) {
                 that.values = values || [];
                 
                 if (callback) {
@@ -354,7 +200,9 @@
         onMessage: function (e) {
             var result = e.data, parts;
             
-            if (result.type == 'result') {
+            if (result.type == 'log') {
+                console.log(result.value);
+            } else if (result.type == 'result') {
                 if (this.callback) {
                     this.callback('I think you have drawn: ' + result.value);
                 }
@@ -366,7 +214,7 @@
             
         },
         
-        init: function (dataSet) {
+        init: function () {
             var that = this;
             
             this.worker = new Worker('scripts/knn-worker.js');
@@ -376,11 +224,15 @@
             
             this.worker.postMessage({
                 type: 'init',
-                data: dataSet
+                data: Numbers.getAll()
             });
         },
         
         decode: function (data, callback) {
+            if (!this.worker) {
+                this.init();
+            }
+            
             if (this.inProgress === true) {
                 return false;
             }
@@ -397,11 +249,23 @@
         },
         
         addToTrainingSet: function (label, data) {
+            if (!this.worker) {
+                this.init();
+            }
+            
             this.worker.postMessage({
                 type: 'add',
                 data: data,
                 label: label
             });
+        },
+        
+        destroy: function () {
+            if (this.inProgress) {
+                this.worker.terminate();
+                this.inProgress = false;
+                this.worker = null;
+            }
         }
     }
 
@@ -451,6 +315,7 @@
             }
             
             home.setMode('recognize');
+            home.reset();
             this.switchLink(target);
             
             if (this.checkPrecondition() === false) {
@@ -466,6 +331,8 @@
         },
         
         clickTrain: function (target) {
+            home.reset();
+            
             if (!trainingSet) {
                 trainingSet = new TrainingSetView();
             } else {
@@ -515,6 +382,8 @@
     CanvasView = Backbone.View.extend({
         template: $("#canvasTemplate").html(),
         className: 'canvas-container',
+        inProgress: false,
+        
         events: {
             "click .action": "click",
             "click .clear": "reset"
@@ -525,6 +394,7 @@
             
             this.$canvas = $('canvas', this.$el)
             this.$actionButton = $('.action', this.$el);
+            this.$resetButton = $('.clear', this.$el);
             
             this.initCanvas();
         },
@@ -603,6 +473,8 @@
         reset: function (e) {
             var canvas = this.$canvas.get(0);
             canvas.width = canvas.width;
+            
+            this.switchFromReadOnly();
         },
         
         save: function () {
@@ -622,6 +494,8 @@
                 bits = this.getBits(ctx.getImageData(0, 0, 320, 240).data),
                 decodeResult;
                 
+            this.switchToReadOnly();
+            
             decodeResult = knnWorker.decode(bits, function (result) {
                 clearInterval(that.interval);
                 resultView.updateResult(result);
@@ -662,6 +536,27 @@
             }
             
             return result;
+        },
+        
+        switchToReadOnly: function () {
+            this.inProgress = true;
+            
+            this.$actionButton.attr('disabled', 'disabled');
+            this.$resetButton.text('Stop');
+        },
+        
+        switchFromReadOnly: function () {
+            if (this.inProgress === false) {
+                return;
+            }
+            
+            this.inProgress = false;
+            
+            knnWorker.destroy();
+            resultView.hide();
+            
+            this.$actionButton.removeAttr('disabled', 'disabled');
+            this.$resetButton.text('Clear');
         }
     });
     
@@ -929,7 +824,7 @@
     //create router instance
     Numbers.loadStore(function () {
         router = new AppRouter();
-        knnWorker.init(Numbers.getAll());
+        knnWorker.init();
         
         clearInterval(preloaderInterval);
         preloader.parent().remove();
