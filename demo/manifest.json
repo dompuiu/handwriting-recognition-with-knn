@@ -1,0 +1,9 @@
+{
+  "name": "knn App",
+  "description": "Try to guess the design number",
+  "version": "1",
+  "permissions": [
+    "unlimitedStorage",
+    "notifications"
+  ]
+}

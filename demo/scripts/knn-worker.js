@@ -1,13 +1,12 @@
-var init, initComplete = false, dataSet = [], labels = [], p = 0, knn;
+var init, initComplete = false, p = 0, knn;
 importScripts('http://cdnjs.cloudflare.com/ajax/libs/underscore.js/1.3.3/underscore-min.js', '../../src/knn-o.js');
 
 init = function (set) {
-    var i, l, bitMap, label;
+    var i, l, label, dataSet = [], labels = [];
     for (i = 0, l = set.length; i < l; i += 1) {
-        label = set[i].type;
         
         dataSet.push(set[i].bits);
-        labels.push(label);
+        labels.push(set[i].type);
     }
     
     knn = Knn.init(labels, dataSet, 10);
@@ -15,7 +14,7 @@ init = function (set) {
 }
 
 decode = function (data) {
-    return knn.classify(data, function (i, l) {
+    var result = knn.classify(data, function (i, l) {
         postMessage({
             type: 'info',
             value: {
@@ -24,6 +23,15 @@ decode = function (data) {
             }
         });
     });
+    
+    if (result === 'undefined') {
+        postMessage({
+            type: 'log',
+            value: data
+        });
+    }
+    
+    return result;
 }
 
 getWaitMsgText = function () {
