@@ -165,7 +165,12 @@ a.thumbnail:hover .position {
 }
 
 .preloader span {
-    display: table-cell;
-    text-align: center;
+    line-height: 64px;
     vertical-align: middle;
+    background: url(../img/loader.gif) no-repeat left center;
+    padding: 0 0 0 85px;
+    position: absolute;
+    left: 50%;
+    top: 45%;
+    margin-left: -85px;
 }
