@@ -1,5 +1,5 @@
 (function ($) {
-    var glyphs = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A'], intervalId, timeoutId;
+    var glyphs = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'], intervalId, timeoutId;
     
     
     var MenuView,
@@ -14,7 +14,7 @@
         ConditionView,
         ResultView,
         knnWorker,
-        home,
+        canvasView,
         conditionView,
         trainingSet,
         resultView,
@@ -100,10 +100,19 @@
             var that = this, i, l, count = 0;
 
             for (i = 0, l = values.length; i < l; i += 1) {
+                if (_.indexOf(glyphs, values[i].type) === -1) {
+                    count += 1;
+                    
+                    if (count === l && callback) {
+                        callback();
+                    }
+                    continue;
+                }
+                
                 that.addToStore(values[i], function (record) {
                     that.values.push(record);
                     count += 1;
-                    resultView.updateResult('Added glyph ' + count + ' out of total ' + l + '.');
+                    resultView.updateResult('Added glyph ' + count + ' out of a total of ' + l + '.');
                     
                     if (count === l) {
                         if (callback) {
@@ -231,7 +240,10 @@
         inProgress: false,
         onMessage: function (e) {
             var result = e.data, parts;
-
+            if (this.worker === null) {
+                return;
+            }
+            
             if (result.type == 'log') {
                 console.log(result.value);
             } else if (result.type == 'result') {
@@ -241,7 +253,7 @@
                 this.inProgress = false;
             } else {
                 parts = result.value;
-                WaitingMsg.getText('Analyzing sample ' + parts.current + ' out of total ' + parts.total + '.', true);
+                WaitingMsg.getText('Analyzing sample ' + parts.current + ' out of a total of ' + parts.total + '.', true);
             }
 
         },
@@ -343,21 +355,21 @@
         clickHome: function (target) {
             if (trainingSet) {
                 trainingSet.hide();
-            } else if (!home) {
-                home = new CanvasView();
+            } else if (!canvasView) {
+                canvasView = new CanvasView();
                 resultView = new ResultView();
                 conditionView = new ConditionView();
             }
 
-            home.setMode('recognize');
-            home.reset();
+            canvasView.setMode('recognize');
+            canvasView.reset();
             this.switchLink(target);
 
             this.updateView();
         },
 
         clickTrain: function (target) {
-            home.reset();
+            canvasView.reset();
 
             if (!trainingSet) {
                 trainingSet = new TrainingSetView();
@@ -368,8 +380,8 @@
             if (conditionView) {
                 conditionView.hide();
             }
-            home.setMode('training');
-            home.enable();
+            canvasView.setMode('training');
+            canvasView.enable();
 
             resultView.hide();
 
@@ -405,9 +417,9 @@
         updateView: function () {
             if (this.checkPrecondition() === false) {
                 conditionView.show();
-                home.disable();
+                canvasView.disable();
             } else {
-                home.enable();
+                canvasView.enable();
             }
         },
         
@@ -424,7 +436,8 @@
 
         events: {
             "click .action": "click",
-            "click .clear": "reset"
+            "click .clear": "reset",
+            "change #preset-glyph": "loadPresetInCanvas"
         },
 
         initialize: function () {
@@ -432,8 +445,11 @@
 
             this.$actionButton = $('.action', this.$el);
             this.$resetButton = $('.clear', this.$el);
-
+            this.$presetSlect = $('#preset-glyph', this.$el)
+            this.$presetSlectContainer = $('.preset-glyphs', this.$el)
+            
             this.initCanvas();
+            this.initPresetsSelect();
         },
 
         render: function () {
@@ -462,6 +478,21 @@
                 that.canvasEvent(e, that.$canvas, tool);
             });
         },
+        
+        initPresetsSelect: function () {
+            var select = this.$presetSlect;
+            
+            _.each(glyphs, function (item) {
+                _.each(_.range(21), function (i) {
+                    var option = $("<option/>", {
+                        value: item + '_' + i + '.txt',
+                        text: 'Glyph ' + item + ' (' + i + ')'
+                    }).appendTo(select);
+                });            
+            });            
+            
+            $('.preset-glyphs').show();
+        },
 
         canvasEvent: function (ev, canvas, tool) {
             var offset = canvas.offset();
@@ -484,8 +515,10 @@
         updateView: function () {
             if (this.options.mode === 'training') {
                 this.$actionButton.text('Save');
+                this.$presetSlectContainer.hide();
             } else {
                 this.$actionButton.text('Decode');
+                this.$presetSlectContainer.show();
             }
         },
 
@@ -532,6 +565,7 @@
                     clearInterval(that.interval);
                     resultView.updateResult(result);
                     that.clearCanvas();
+                    this.switchFromReadOnly();
                 });
 
                 if (decodeResult === false) {
@@ -554,11 +588,13 @@
         enable: function () {
             this.readOnly = false;
             $('button', this.$el).removeAttr('disabled', 'disabled');
+            this.$presetSlect.removeAttr('disabled', 'disabled');
         },
 
         disable: function () {
             this.readOnly = true;
             $('button', this.$el).attr('disabled', 'disabled');
+            this.$presetSlect.attr('disabled', 'disabled');
         },
 
         getBits: function (pixels) {
@@ -577,20 +613,53 @@
 
             this.$actionButton.attr('disabled', 'disabled');
             this.$resetButton.text('Stop');
+            this.$presetSlect.attr('disabled', 'disabled');
         },
 
         switchFromReadOnly: function () {
             if (this.readOnly === false) {
                 return;
             }
-
+            
+            clearInterval(this.interval);
             this.readOnly = false;
 
             knnWorker.destroy();
             resultView.hide();
 
             this.$actionButton.removeAttr('disabled', 'disabled');
+            this.$presetSlect.removeAttr('disabled', 'disabled');
             this.$resetButton.text('Clear');
+        },
+        
+        loadPresetInCanvas: function (e) {
+            var that = this, file = e.currentTarget.value, url = 'test-data/' + file;
+            
+            $.ajax({
+                url: url,
+            }).done(function (data) {
+                that.drawInCanvas(data);
+            }).fail(function() {
+                
+            });
+        },
+        
+        drawInCanvas: function (data) {
+            var canvas = this.$canvas.get(0), 
+                ctx = canvas.getContext('2d'),
+                bits, pos, i, l;
+                        
+            this.clearCanvas();
+            bits = ctx.getImageData(0, 0, 320, 240);
+            data = data.replace(/\n/g, '');
+                
+            for (i = 0, l = data.length; i < l; i += 1) {
+                pos = (i * 4) + 3;
+                if (data[i] === "1") {
+                    bits.data[pos] = 255;
+                }
+            }
+            ctx.putImageData(bits, 0, 0);
         }
     });
 

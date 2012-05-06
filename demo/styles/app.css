@@ -10,6 +10,9 @@ a {
 
 .canvas-container {
     text-align: center;
+    width: 350px;
+    margin: auto;
+    position: relative;
 }
 
 .canvas {
@@ -173,4 +176,12 @@ a.thumbnail:hover .position {
     left: 50%;
     top: 45%;
     margin-left: -85px;
+}
+
+.preset-glyphs {
+    position: absolute;
+    top: 60px;
+    right: -172px;
+    text-align: left;
+    display: none;
 }
