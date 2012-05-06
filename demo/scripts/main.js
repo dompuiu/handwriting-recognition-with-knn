@@ -1,6 +1,8 @@
 (function ($) {
-    var glyphs = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A'],
-        MenuView,
+    var glyphs = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A'], intervalId, timeoutId;
+    
+    
+    var MenuView,
         CanvasView,
         TrainingSetView,
         PictureView,
@@ -18,9 +20,10 @@
         resultView,
         router,
         preloader = $('<span></span>').appendTo($('<div class="preloader"></div>').appendTo('body')),
-        preloaderInterval;
+        intervalId,
+        app;
 
-    preloaderInterval = setInterval(function () {
+    intervalId = setInterval(function () {
         preloader.html(WaitingMsg.getText('Loading '));
     }, 250);
 
@@ -69,8 +72,8 @@
             });
         },
 
-        addToStore: function (data) {
-            this.storage.add(data);
+        addToStore: function (data, callback) {
+            this.storage.add(data, callback);
         },
 
         removeFromStore: function (id, callback) {
@@ -90,29 +93,26 @@
         },
 
         getAll: function () {
-            /*jqxhr = $.ajax({
-                url: 'save.php',
-                type: 'post',
-                data: {data: JSON.stringify(this.values)}
-            });*/
-
             return this.values;
         },
 
         setAll: function (values, callback) {
-            var that = this;
-            this.values = values;
+            var that = this, i, l, count = 0;
 
-            this.resetStore(function () {
-                var i, l;
-                for (i = 0, l = that.values.length; i < l; i += 1) {
-                    that.addToStore(that.values[i]);
-                }
+            for (i = 0, l = values.length; i < l; i += 1) {
+                that.addToStore(values[i], function (record) {
+                    that.values.push(record);
+                    count += 1;
+                    resultView.updateResult('Added glyph ' + count + ' out of total ' + l + '.');
+                    
+                    if (count === l) {
+                        if (callback) {
+                            callback();
+                        }
+                    }
+                });
+            }
 
-                if (callback) {
-                    callback();
-                }
-            });
 
         },
 
@@ -159,13 +159,39 @@
         }
     }
 
-    Pencil = function (context) {
-        var tool = this;
+    Pencil = function (view) {
+        var tool = this, canvas = view.$canvas.get(0), context;
+        
         this.started = false;
+        if (!canvas.getContext) {
+            alert('Error: no canvas.getContext!');
+            return;
+        }
+
+        // Get the 2D canvas context.
+        context = canvas.getContext('2d');
+        if (!context) {
+                alert('Error: failed to getContext!');
+                return;
+            }
+        
+         if (!canvas.getContext) {
+            alert('Error: no canvas.getContext!');
+            return;
+        }
+
+        // Get the 2D canvas context.
+        context = canvas.getContext('2d');
+        if (!context) {
+            alert('Error: failed to getContext!');
+            return;
+        }
+        
+        
         // This is called when you start holding down the mouse button.
         // This starts the pencil drawing.
         this.mousedown = function (ev) {
-            if (home.inProgress === true) {
+            if (view.readOnly === true) {
                 return false;
             }
 
@@ -308,7 +334,8 @@
                     this.clickHome(e.target);
 
             }
-
+            
+            this.clearTimeoutsAndIntervals();
             e.preventDefault();
             document.location.hash = e.target.id;
         },
@@ -318,22 +345,15 @@
                 trainingSet.hide();
             } else if (!home) {
                 home = new CanvasView();
+                resultView = new ResultView();
+                conditionView = new ConditionView();
             }
 
             home.setMode('recognize');
             home.reset();
             this.switchLink(target);
 
-            if (this.checkPrecondition() === false) {
-                if (conditionView) {
-                    conditionView.show();
-                } else {
-                    conditionView = new ConditionView();
-                }
-                home.disable();
-            } else {
-                home.enable();
-            }
+            this.updateView();
         },
 
         clickTrain: function (target) {
@@ -351,9 +371,7 @@
             home.setMode('training');
             home.enable();
 
-            if (resultView) {
-                resultView.hide();
-            }
+            resultView.hide();
 
             this.switchLink(target);
         },
@@ -382,13 +400,27 @@
             });
 
             return result;
+        },
+        
+        updateView: function () {
+            if (this.checkPrecondition() === false) {
+                conditionView.show();
+                home.disable();
+            } else {
+                home.enable();
+            }
+        },
+        
+        clearTimeoutsAndIntervals: function () {
+            clearTimeout(timeoutId);
+            clearInterval(intervalId);
         }
     });
 
     CanvasView = Backbone.View.extend({
         template: $("#canvasTemplate").html(),
         className: 'canvas-container',
-        inProgress: false,
+        readOnly: false,
 
         events: {
             "click .action": "click",
@@ -398,7 +430,6 @@
         initialize: function () {
             this.render();
 
-            this.$canvas = $('canvas', this.$el)
             this.$actionButton = $('.action', this.$el);
             this.$resetButton = $('.clear', this.$el);
 
@@ -416,26 +447,16 @@
         initCanvas: function () {
             // Find the canvas element.
             var tool, that = this;
+            
+            this.$canvas = $('canvas', this.$el);
 
             if (!this.$canvas) {
                 alert('Error: I cannot find the canvas element!');
                 return;
             }
 
-            if (!this.$canvas.get(0).getContext) {
-                alert('Error: no canvas.getContext!');
-                return;
-            }
-
-            // Get the 2D canvas context.
-            context = this.$canvas.get(0).getContext('2d');
-            if (!context) {
-                alert('Error: failed to getContext!');
-                return;
-            }
-
             // Pencil tool instance.
-            tool = new Pencil(context);
+            tool = new Pencil(this);
 
             this.$canvas.bind('mousedown mousemove mouseup mouseout', function (e) {
                 that.canvasEvent(e, that.$canvas, tool);
@@ -520,11 +541,7 @@
                 msg = "You didn't draw anything.";
             }
 
-            if (!resultView) {
-                resultView = new ResultView(msg);
-            } else {
-                resultView.updateResult(msg);
-            }
+            resultView.updateResult(msg);
 
             if (bits.length > 0) {
                 this.interval = setInterval(function () {
@@ -532,15 +549,15 @@
                 }, 500);
             }
 
-            resultView.show();
-
         },
 
         enable: function () {
+            this.readOnly = false;
             $('button', this.$el).removeAttr('disabled', 'disabled');
         },
 
         disable: function () {
+            this.readOnly = true;
             $('button', this.$el).attr('disabled', 'disabled');
         },
 
@@ -556,18 +573,18 @@
         },
 
         switchToReadOnly: function () {
-            this.inProgress = true;
+            this.readOnly = true;
 
             this.$actionButton.attr('disabled', 'disabled');
             this.$resetButton.text('Stop');
         },
 
         switchFromReadOnly: function () {
-            if (this.inProgress === false) {
+            if (this.readOnly === false) {
                 return;
             }
 
-            this.inProgress = false;
+            this.readOnly = false;
 
             knnWorker.destroy();
             resultView.hide();
@@ -736,11 +753,13 @@
     });
 
     ConditionView = Backbone.View.extend({
+        fileId: 0,
+        failed: false,
         template: $("#preconditionFailed").html(),
         className: 'well message',
 
         events: {
-            'click a': 'importTrainingSet'
+            'click a': 'importGlyphs'
         },
 
         initialize: function () {
@@ -748,6 +767,7 @@
         },
 
         render: function () {
+            this.hide();
             var tmpl = _.template(this.template);
 
             this.$el.html(tmpl());
@@ -763,25 +783,75 @@
         hide: function () {
             this.$el.hide();
         },
+        
+        getNextFile: function () {
+            return 'data/' + this.fileId + '.json';
+        },
 
-        importTrainingSet: function () {
-            var that = this, url = 'scripts/training-set.json', jqxhr;
+        importGlyphs: function () {
+            var that = this, url = this.getNextFile(), jqxhr;
+            
+            this.hide();
             $('body').css('cursor', 'wait');
+            clearInterval(intervalId);
+            if (that.failed === false) {
+                intervalId = setInterval(function () {
+                    resultView.updateResult(
+                        WaitingMsg.getText('Trying to import glyphs from the file "' + url + '"')
+                    );
+                }, 250);
+            }
+            
+            timeoutId = setTimeout(function () {
+                jqxhr = $.ajax({
+                    url: url,
+                }).done(function (data) {
+                    that.failed = false;
+                    
+                    clearInterval(intervalId);
+                    Numbers.setAll(data || [], function () {
+                        if (trainingSet) {
+                            trainingSet.trigger("change:filterType");
+                            trainingSet.setResetLinkVisibility();
+                        }
+                        that.importComplete(url, 1000, function () {
+                            that.fileId += 1;
+                            that.importGlyphs();
+                        });
+                    });
+                }).fail(function() {
+                    if (that.failed === false) {
+                        that.failed = true;
+                        that.fileId += 1;
+                        
+                        that.importGlyphs();
+                        return;
+                    }
+                    
+                    clearInterval(intervalId);
+                    that.importComplete();
 
-            jqxhr = $.ajax({
-                url: url,
-            }).done(function (data) {
-                Numbers.setAll(data || []);
-                $('body').css('cursor', '');
-                that.hide();
-                home.enable();
-                if (trainingSet) {
-                    trainingSet.trigger("change:filterType");
-                    trainingSet.setResetLinkVisibility();
+                });
+            }, 1000);
+        },
+        
+        importComplete: function (url, timeout, callback) {
+            var msg = 'Import process is completed.';
+            $('body').css('cursor', '');
+            
+            if(url) {
+                msg = 'Import of the file "' + url + '" was completed.';
+            }
+            resultView.updateResult(msg);
+            
+            timeoutId = setTimeout(function () {
+                if (callback) {
+                    callback();
+                } else {
+                    resultView.hide();
+                    app.updateView();
                 }
-            }).fail(function() {
-                that.$el.html('<h3>The training set located at `' + url + '` could not be loaded.</h3>');
-            });
+            }, timeout || 2500);
         }
     });
 
@@ -795,6 +865,7 @@
         },
 
         render: function (result) {
+            this.hide();
             var tmpl = _.template(this.template);
 
             this.$el.html(tmpl({result: result}));
@@ -805,6 +876,7 @@
 
         updateResult: function (result) {
             this.$result.text(result);
+            this.show();
         },
 
         show: function () {
@@ -843,10 +915,10 @@
         router = new AppRouter();
         knnWorker.init();
 
-        clearInterval(preloaderInterval);
+        clearInterval(intervalId);
         preloader.parent().remove();
 
-        new MenuView();
+        app = new MenuView();
         Backbone.history.start();
     });
 

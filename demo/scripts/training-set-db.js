@@ -173,7 +173,7 @@ TrainingSetDB = {
         request = store.put(data);
         request.onsuccess = function(e) {
             if (callback) {
-                callback();
+                callback(data);
             }
         };
         request.onerror = this.onerror;
